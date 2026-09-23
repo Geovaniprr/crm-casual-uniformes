@@ -14,9 +14,16 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("evolution-webhook")
 
-# Mesmo projeto/chave publicável usados em app.js (protegidos por RLS no Supabase).
-SUPABASE_URL = "https://umtmgapioumgbpeiyhko.supabase.co"
-SUPABASE_KEY = "sb_publishable_Kmc1f8fz7zZimsrBnwq3KA_OM2G5kMC"
+SUPABASE_URL = "https://dqxuoqfwwntpxvhfhmyy.supabase.co"
+# Chave "service_role": acesso privilegiado que ignora RLS. Precisa ser
+# configurada como variável de ambiente no projeto da Vercel (Settings >
+# Environment Variables) — NUNCA hardcoded nem no front-end. O webhook não
+# tem um usuário logado, então usa essa chave pra gravar leads mesmo com o
+# RLS agora exigindo login (authenticated) nas tabelas.
+SUPABASE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+# As tabelas do CRM ficam no schema "crm" (não no "public"), então todo
+# request ao PostgREST precisa dizer isso via header de profile.
+SUPABASE_SCHEMA = "crm"
 
 # Segredo próprio do webhook: definido como variável de ambiente no projeto da
 # Vercel (Settings > Environment Variables), NÃO fica hardcoded aqui. Sem
@@ -34,6 +41,10 @@ def supa_headers(extra=None):
         "apikey": SUPABASE_KEY,
         "Authorization": "Bearer " + SUPABASE_KEY,
         "Content-Type": "application/json",
+        # GET usa Accept-Profile, POST/PATCH/DELETE usa Content-Profile;
+        # mandar os dois nao atrapalha, o PostgREST usa o que for relevante.
+        "Accept-Profile": SUPABASE_SCHEMA,
+        "Content-Profile": SUPABASE_SCHEMA,
     }
     if extra:
         headers.update(extra)

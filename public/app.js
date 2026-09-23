@@ -167,8 +167,100 @@ var LOCAL_SETTINGS_KEY = 'casualcrm_settings_v1';
 
 // Banco real (Supabase). Chave publicável — segura para uso no navegador
 // (protegida por Row Level Security no lado do banco).
-var SUPABASE_URL = 'https://umtmgapioumgbpeiyhko.supabase.co';
-var SUPABASE_KEY = 'sb_publishable_Kmc1f8fz7zZimsrBnwq3KA_OM2G5kMC';
+var SUPABASE_URL = 'https://dqxuoqfwwntpxvhfhmyy.supabase.co';
+var SUPABASE_KEY = 'sb_publishable_9zkNNA325auwdbf6etUsdQ_aQ0sGyGC';
+// As tabelas do CRM ficam no schema "crm" (nao no "public").
+var SUPABASE_SCHEMA = 'crm';
+
+/* =========================================================
+   AUTENTICAÇÃO — login por código enviado por e-mail
+   (Supabase Auth). Só e-mails já cadastrados como usuário no
+   projeto recebem código (create_user:false), então dá pra
+   controlar quem acessa direto pelo painel do Supabase.
+   ========================================================= */
+var AUTH_STORAGE_KEY = 'casualcrm_session_v1';
+var currentSession = null;
+
+function loadStoredSession(){
+  try{
+    var raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function storeSession(session){
+  try{ localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session)); }catch(e){}
+}
+function clearStoredSession(){
+  try{ localStorage.removeItem(AUTH_STORAGE_KEY); }catch(e){}
+}
+function sessionIsValid(s){
+  return !!(s && s.access_token && s.expires_at && s.expires_at > Date.now() + 30000);
+}
+
+async function authFetch(path, body){
+  var res = await fetch(SUPABASE_URL + '/auth/v1/' + path, {
+    method: 'POST',
+    headers: { 'apikey': SUPABASE_KEY, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  var data = null;
+  try{ data = await res.json(); }catch(e){}
+  if(!res.ok){
+    var msg = (data && (data.error_description || data.msg || data.error)) || ('Erro ' + res.status);
+    var err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function requestLoginCode(email){
+  return authFetch('otp', { email: email, create_user: false });
+}
+
+async function verifyLoginCode(email, token){
+  var data = await authFetch('verify', { email: email, token: token, type: 'email' });
+  var session = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + (data.expires_in * 1000),
+    email: (data.user && data.user.email) || email
+  };
+  currentSession = session;
+  storeSession(session);
+  return session;
+}
+
+async function refreshSession(){
+  if(!currentSession || !currentSession.refresh_token) return null;
+  try{
+    var data = await authFetch('token?grant_type=refresh_token', { refresh_token: currentSession.refresh_token });
+    var session = {
+      access_token: data.access_token,
+      refresh_token: data.refresh_token,
+      expires_at: Date.now() + (data.expires_in * 1000),
+      email: currentSession.email
+    };
+    currentSession = session;
+    storeSession(session);
+    return session;
+  }catch(e){
+    currentSession = null;
+    clearStoredSession();
+    return null;
+  }
+}
+
+async function ensureSession(){
+  if(sessionIsValid(currentSession)) return currentSession;
+  return await refreshSession();
+}
+
+function signOut(){
+  currentSession = null;
+  clearStoredSession();
+  location.reload();
+}
 
 /* =========================================================
    STATE
@@ -403,10 +495,14 @@ function fromDbLead(r){
 
 async function supaFetch(path, opts){
   opts = opts || {};
+  var session = await ensureSession();
+  if(!session){ signOut(); throw new Error('Sessão expirada, faça login de novo.'); }
   var headers = Object.assign({
     'apikey': SUPABASE_KEY,
-    'Authorization': 'Bearer ' + SUPABASE_KEY,
-    'Content-Type': 'application/json'
+    'Authorization': 'Bearer ' + session.access_token,
+    'Content-Type': 'application/json',
+    'Accept-Profile': SUPABASE_SCHEMA,
+    'Content-Profile': SUPABASE_SCHEMA
   }, opts.headers || {});
   var res = await fetch(SUPABASE_URL + '/rest/v1/' + path, {
     method: opts.method || 'GET',
@@ -437,12 +533,14 @@ async function uploadLeadPhoto(leadId, file){
   if(file.size > MAX_PHOTO_MB * 1024 * 1024){
     throw new Error('Arquivo maior que ' + MAX_PHOTO_MB + 'MB.');
   }
+  var session = await ensureSession();
+  if(!session){ signOut(); throw new Error('Sessão expirada, faça login de novo.'); }
   var path = leadId + '/' + Date.now() + '_' + sanitizeFileName(file.name);
   var res = await fetch(SUPABASE_URL + '/storage/v1/object/' + PHOTOS_BUCKET + '/' + path, {
     method: 'POST',
     headers: {
       'apikey': SUPABASE_KEY,
-      'Authorization': 'Bearer ' + SUPABASE_KEY,
+      'Authorization': 'Bearer ' + session.access_token,
       'Content-Type': file.type || 'application/octet-stream',
       'x-upsert': 'false'
     },
@@ -460,9 +558,11 @@ async function uploadLeadPhoto(leadId, file){
 }
 async function deleteLeadPhotoFile(path){
   try{
+    var session = await ensureSession();
+    if(!session) return;
     await fetch(SUPABASE_URL + '/storage/v1/object/' + PHOTOS_BUCKET + '/' + path, {
       method: 'DELETE',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + session.access_token }
     });
   }catch(e){ console.error('Falha ao excluir arquivo de foto', e); }
 }
@@ -1808,8 +1908,90 @@ setInterval(function(){
 }, 60000);
 
 /* =========================================================
+   LOGIN
+   ========================================================= */
+var loginStep = 1;
+var loginEmailValue = '';
+
+function showLoginError(msg){
+  var el = document.getElementById('loginError');
+  el.textContent = msg;
+  el.style.display = '';
+}
+function hideLoginError(){
+  document.getElementById('loginError').style.display = 'none';
+}
+function showApp(){
+  document.getElementById('loginOverlay').classList.add('hidden');
+  document.getElementById('app').style.display = '';
+}
+
+async function handleLoginSubmit(){
+  hideLoginError();
+  var btn = document.getElementById('loginSubmit');
+  if(loginStep === 1){
+    var email = document.getElementById('loginEmail').value.trim();
+    if(!email){ showLoginError('Digite seu e-mail.'); return; }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    try{
+      await requestLoginCode(email);
+      loginEmailValue = email;
+      loginStep = 2;
+      document.getElementById('loginEmailEcho').textContent = email;
+      document.getElementById('loginStep1').style.display = 'none';
+      document.getElementById('loginStep2').style.display = '';
+      document.getElementById('loginBack').style.display = '';
+      btn.textContent = 'Confirmar código';
+      document.getElementById('loginCode').focus();
+    }catch(e){
+      showLoginError('Não foi possível enviar o código (e-mail não autorizado ou fora do ar).');
+    }finally{
+      btn.disabled = false;
+    }
+  } else {
+    var code = document.getElementById('loginCode').value.trim();
+    if(!code){ showLoginError('Digite o código recebido.'); return; }
+    btn.disabled = true; btn.textContent = 'Confirmando…';
+    try{
+      await verifyLoginCode(loginEmailValue, code);
+      showApp();
+      initStore();
+    }catch(e){
+      showLoginError('Código inválido ou expirado.');
+    }finally{
+      btn.disabled = false;
+      btn.textContent = 'Confirmar código';
+    }
+  }
+}
+
+document.getElementById('loginSubmit').addEventListener('click', handleLoginSubmit);
+document.getElementById('loginBack').addEventListener('click', function(){
+  loginStep = 1;
+  document.getElementById('loginStep1').style.display = '';
+  document.getElementById('loginStep2').style.display = 'none';
+  document.getElementById('loginBack').style.display = 'none';
+  document.getElementById('loginSubmit').textContent = 'Enviar código';
+  hideLoginError();
+});
+document.getElementById('loginEmail').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLoginSubmit(); });
+document.getElementById('loginCode').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLoginSubmit(); });
+document.getElementById('logoutBtn').addEventListener('click', function(){
+  if(confirm('Sair da conta?')) signOut();
+});
+
+/* =========================================================
    BOOT
    ========================================================= */
-initStore();
+async function boot(){
+  currentSession = loadStoredSession();
+  var session = await ensureSession();
+  if(session){
+    showApp();
+    initStore();
+  }
+  // se nao tem sessao valida, fica no login (ja visivel por padrao no HTML)
+}
+boot();
 
 })();
