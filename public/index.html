@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>CRM · Casual Uniformes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app" id="app">
+
+  <div class="topbar">
+    <div class="topbar-main">
+      <div class="brand">
+        <span class="brand-mark">Casual&nbsp;CRM</span>
+        <span class="brand-sub">Atendimento&nbsp;·&nbsp;WhatsApp</span>
+      </div>
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="searchInput" type="text" placeholder="Buscar por nome ou WhatsApp…" autocomplete="off">
+      </div>
+      <button class="sync-pill" id="syncPill" title="Status de salvamento — clique para atualizar">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncText">Conectando…</span>
+      </button>
+      <button class="btn btn-icon" id="settingsBtn" title="Configurações" aria-label="Configurações">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+      <button class="btn" id="newLeadBtn">＋ Novo lead</button>
+    </div>
+
+    <div class="counters" id="countersRow"></div>
+
+    <div class="filters-bar">
+      <div class="filter-row" id="dateFilterRow"></div>
+      <div class="filter-row" id="statusFilterRow"></div>
+    </div>
+  </div>
+
+  <div class="board-scroll">
+    <div id="boardArea">
+      <div class="state-screen"><div class="spinner"></div><div class="big">Carregando atendimentos…</div></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-stack" id="toastStack"></div>
+
+<!-- ===================== MODAL: LEAD DETAIL ===================== -->
+<div class="overlay hidden" id="leadModalOverlay">
+  <div class="modal wide">
+    <div class="modal-head">
+      <span class="modal-title" id="leadModalTitle" style="display:flex;align-items:center;gap:10px;"><span id="leadModalAvatar"></span><span id="leadModalTitleText">Cliente</span></span>
+      <button class="modal-close" id="leadModalClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body" id="leadModalBody"></div>
+    <div class="modal-foot" id="leadModalFoot"></div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: NEW LEAD ===================== -->
+<div class="overlay hidden" id="newLeadOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">🆕 Novo lead</span>
+      <button class="modal-close" id="newLeadClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Nome do cliente <span class="required-star">*</span></label>
+        <input type="text" id="nlName" placeholder="Ex.: João Pereira">
+      </div>
+      <div class="field">
+        <label>WhatsApp <span class="required-star">*</span></label>
+        <input type="tel" id="nlPhone" placeholder="Ex.: 77 99999-9999">
+      </div>
+      <div class="field">
+        <label>Origem</label>
+        <select id="nlOrigin">
+          <option value="WhatsApp direto">WhatsApp direto</option>
+          <option value="Instagram Ads">Instagram Ads</option>
+          <option value="Facebook Ads">Facebook Ads</option>
+          <option value="Instagram orgânico">Instagram orgânico</option>
+          <option value="Indicação">Indicação</option>
+          <option value="Site">Site</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Quantidade (opcional)</label>
+          <input type="number" id="nlQuantity" min="0" placeholder="Ex.: 30">
+        </div>
+        <div class="field">
+          <label>Produto (opcional)</label>
+          <input type="text" id="nlProduct" placeholder="Ex.: Polo piquet">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="nlCancel">Cancelar</button>
+      <button class="btn" id="nlSave">Adicionar lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: START ATTENDING (RESPONSÁVEL) ===================== -->
+<div class="overlay hidden" id="attendingOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">💬 Iniciar atendimento</span>
+      <button class="modal-close" id="attendingClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Quem está iniciando este atendimento?</label>
+        <div id="aResponsibleToggle"></div>
+        <div class="field-hint">Fica registrado no card do cliente, para saber quem começou.</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="aSkip">Mover sem definir</button>
+      <button class="btn" id="aSave">Iniciar atendimento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: MOVE TO AGUARDANDO ===================== -->
+<div class="overlay hidden" id="waitingOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">⏳ Aguardando cliente</span>
+      <button class="modal-close" id="waitingClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Motivo da espera</label>
+        <select id="wReason">
+          <option value="Orçamento enviado">Orçamento enviado</option>
+          <option value="Catálogo enviado">Catálogo enviado</option>
+          <option value="Aguardando logomarca">Aguardando logomarca</option>
+          <option value="Aguardando confirmação">Aguardando confirmação</option>
+          <option value="Cliente disse que ia verificar">Cliente disse que ia verificar</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Data da última mensagem</label>
+        <input type="datetime-local" id="wLastMsg">
+      </div>
+      <div class="field">
+        <label>Próximo follow-up (opcional)</label>
+        <input type="date" id="wFollowUp">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="wCancel">Cancelar</button>
+      <button class="btn" id="wSave">Mover para Aguardando</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: CLOSE (FECHADO) ===================== -->
+<div class="overlay hidden" id="closeOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">✅ Fechar venda</span>
+      <button class="modal-close" id="closeOverlayClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Valor fechado (R$) <span class="required-star">*</span></label>
+        <input type="number" id="cValue" min="0" step="0.01" placeholder="Ex.: 1450.00">
+      </div>
+      <div class="field">
+        <label>Forma de pagamento</label>
+        <select id="cPayment">
+          <option value="Pix">Pix</option>
+          <option value="Boleto">Boleto</option>
+          <option value="Cartão de crédito">Cartão de crédito</option>
+          <option value="Transferência">Transferência</option>
+          <option value="Dinheiro">Dinheiro</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Data do fechamento</label>
+        <input type="date" id="cDate">
+      </div>
+      <div class="field">
+        <label>Quem fechou a venda?</label>
+        <div id="cRespToggle"></div>
+      </div>
+      <div class="field">
+        <label>Observações</label>
+        <textarea id="cNotes" placeholder="Detalhes do pedido, prazos combinados…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="cCancel">Cancelar</button>
+      <button class="btn" id="cSave">Confirmar fechamento</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: REPASSE (PEQUENO PEDIDO) ===================== -->
+<div class="overlay hidden" id="repassOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">📦 Repassar pequeno pedido</span>
+      <button class="modal-close" id="repassOverlayClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Quantidade de peças</label>
+        <input type="number" id="rQuantity" min="0" placeholder="Ex.: 3">
+      </div>
+      <div class="field">
+        <label>Repassar para (contato)</label>
+        <input type="text" id="rContact" placeholder="Nome / número do responsável">
+      </div>
+      <div class="field">
+        <label>Observação</label>
+        <textarea id="rNotes" placeholder="Detalhes do pedido"></textarea>
+      </div>
+      <div class="field">
+        <label>Mensagem padrão para o cliente</label>
+        <div class="copybox" id="rMsgPreview"></div>
+        <div class="field-hint">Copie e envie manualmente no WhatsApp do cliente.</div>
+        <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" id="rCopyBtn">📋 Copiar mensagem</button></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="rCancel">Cancelar</button>
+      <button class="btn" id="rSave">Confirmar repasse</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: DELIVERED (ENTREGUE) ===================== -->
+<div class="overlay hidden" id="deliveredOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title">📬 Marcar como entregue</span>
+      <button class="modal-close" id="deliveredOverlayClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Data da entrega</label>
+        <input type="date" id="dDate">
+      </div>
+      <div class="field">
+        <label>Observações da entrega</label>
+        <textarea id="dNotes" placeholder="Ex.: Entregue na loja, transportadora, retirada pelo cliente…"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="dCancel">Cancelar</button>
+      <button class="btn" id="dSave">Confirmar entrega</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: SETTINGS ===================== -->
+<div class="overlay hidden" id="settingsOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">⚙️ Configurações</span>
+      <button class="modal-close" id="settingsClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="section-title">Regra de repasse de pequenos pedidos</div>
+      <div class="field">
+        <label>Repassar quando a quantidade for menor ou igual a</label>
+        <input type="number" id="sThreshold" min="1">
+        <div class="field-hint">Pedidos com esta quantidade ou menos poderão ser repassados rapidamente.</div>
+      </div>
+      <div class="field">
+        <label>Contato padrão para repasse</label>
+        <input type="text" id="sContact" placeholder="Ex.: Ana - (77) 90000-0000">
+      </div>
+
+      <div class="section-title">Alertas de "sem resposta" (Aguardando Cliente)</div>
+      <div class="field-row">
+        <div class="field">
+          <label>Atenção (h)</label>
+          <input type="number" id="sT1" min="1">
+        </div>
+        <div class="field">
+          <label>Alerta (h)</label>
+          <input type="number" id="sT2" min="1">
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Crítico (h)</label>
+          <input type="number" id="sT3" min="1">
+        </div>
+        <div class="field">
+          <label>Urgente (h)</label>
+          <input type="number" id="sT4" min="1">
+        </div>
+      </div>
+      <div class="field-hint" style="margin-top:-6px;">Padrão sugerido: 24h · 48h · 72h (3 dias) · 168h (7 dias).</div>
+
+      <div class="section-title">Sobre a integração com WhatsApp Business</div>
+      <div class="field-hint">
+        Esta versão organiza o atendimento manualmente. A integração oficial com a WhatsApp Business Platform (Meta) será conectada futuramente — sem automações não-oficiais.
+      </div>
+    </div>
+    <div class="modal-foot">
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" id="settingsCancel">Cancelar</button>
+      <button class="btn" id="settingsSave">Salvar configurações</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MODAL: CONFIRM DELETE ===================== -->
+<div class="overlay hidden" id="confirmOverlay">
+  <div class="modal narrow">
+    <div class="modal-head">
+      <span class="modal-title" id="confirmTitle">Confirmar</span>
+      <button class="modal-close" id="confirmClose" aria-label="Fechar">✕</button>
+    </div>
+    <div class="modal-body" id="confirmBody" style="font-size:13.5px; color:var(--ink-soft);"></div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="confirmCancel">Cancelar</button>
+      <button class="btn btn-danger" id="confirmOk">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
