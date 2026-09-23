@@ -7,22 +7,17 @@ services:
       POSTGRES_USER: evolution
       POSTGRES_PASSWORD: evolution
       POSTGRES_DB: evolution
-    volumes:
-      - evolution_postgres_data:/var/lib/postgresql/data
+    volumes: ["evolution_postgres_data:/var/lib/postgresql/data"]
 
   evolution-api:
     container_name: evolution_api
     image: evoapicloud/evolution-api:v2.1.1
     restart: always
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
-    depends_on:
-      - postgres
-    volumes:
-      - evolution_instances:/evolution/instances
+    ports: ["8080:8080"]
+    env_file: [".env"]
+    depends_on: ["postgres"]
+    volumes: ["evolution_instances:/evolution/instances"]
 
 volumes:
-  evolution_instances:
-  evolution_postgres_data:
+  evolution_instances: {}
+  evolution_postgres_data: {}
