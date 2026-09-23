@@ -1,5 +1,15 @@
-version: '3.9'
 services:
+  postgres:
+    image: postgres:15
+    container_name: evolution_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: evolution
+      POSTGRES_PASSWORD: evolution
+      POSTGRES_DB: evolution
+    volumes:
+      - evolution_postgres_data:/var/lib/postgresql/data
+
   evolution-api:
     container_name: evolution_api
     image: evoapicloud/evolution-api:v2.1.1
@@ -8,8 +18,11 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    depends_on:
+      - postgres
     volumes:
       - evolution_instances:/evolution/instances
 
 volumes:
   evolution_instances:
+  evolution_postgres_data:
