@@ -350,21 +350,21 @@
           <label>Seu e-mail</label>
           <input type="email" id="loginEmail" placeholder="voce@exemplo.com" autocomplete="email">
         </div>
-        <div class="field-hint">Só e-mails autorizados recebem o código de acesso.</div>
+        <div class="field-hint">Só e-mails autorizados recebem o link de acesso.</div>
       </div>
       <div id="loginStep2" style="display:none">
-        <div class="field">
-          <label>Código recebido por e-mail</label>
-          <input type="text" id="loginCode" placeholder="123456" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+        <div class="field-hint" style="font-size:13.5px;">
+          Enviamos um link de acesso para <strong id="loginEmailEcho"></strong>.
+          Abra seu e-mail nesse mesmo aparelho e clique no link — ele abre o
+          CRM já logado (às vezes numa aba nova).
         </div>
-        <div class="field-hint">Enviamos um código de 6 dígitos para <span id="loginEmailEcho"></span>.</div>
       </div>
       <div id="loginError" style="display:none;font-size:12.5px;color:var(--critical);margin-top:6px;"></div>
     </div>
     <div class="modal-foot">
       <button class="btn btn-ghost" id="loginBack" style="display:none">Voltar</button>
       <span class="spacer"></span>
-      <button class="btn" id="loginSubmit">Enviar código</button>
+      <button class="btn" id="loginSubmit">Enviar link de acesso</button>
     </div>
   </div>
 </div>

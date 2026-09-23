@@ -173,10 +173,10 @@ var SUPABASE_KEY = 'sb_publishable_9zkNNA325auwdbf6etUsdQ_aQ0sGyGC';
 var SUPABASE_SCHEMA = 'crm';
 
 /* =========================================================
-   AUTENTICAÇÃO — login por código enviado por e-mail
-   (Supabase Auth). Só e-mails já cadastrados como usuário no
-   projeto recebem código (create_user:false), então dá pra
-   controlar quem acessa direto pelo painel do Supabase.
+   AUTENTICAÇÃO — link mágico enviado por e-mail (Supabase Auth).
+   Só e-mails já cadastrados como usuário no projeto recebem o
+   link (create_user:false), então dá pra controlar quem acessa
+   direto pelo painel do Supabase (Authentication > Users).
    ========================================================= */
 var AUTH_STORAGE_KEY = 'casualcrm_session_v1';
 var currentSession = null;
@@ -214,20 +214,33 @@ async function authFetch(path, body){
   return data;
 }
 
-function requestLoginCode(email){
-  return authFetch('otp', { email: email, create_user: false });
+function requestMagicLink(email){
+  var redirectTo = window.location.origin + window.location.pathname;
+  return authFetch('otp?redirect_to=' + encodeURIComponent(redirectTo), {
+    email: email,
+    create_user: false
+  });
 }
 
-async function verifyLoginCode(email, token){
-  var data = await authFetch('verify', { email: email, token: token, type: 'email' });
+// Depois que o usuário clica no link do e-mail, o Supabase redireciona de
+// volta pra cá com os tokens no fragmento da URL (#access_token=...).
+// Isso lê esse fragmento, salva a sessão e limpa a URL.
+function consumeAuthRedirect(){
+  var hash = window.location.hash;
+  if(!hash || hash.indexOf('access_token=') === -1) return null;
+  var params = new URLSearchParams(hash.slice(1));
+  var accessToken = params.get('access_token');
+  var refreshToken = params.get('refresh_token');
+  var expiresIn = Number(params.get('expires_in')) || 3600;
+  if(!accessToken) return null;
   var session = {
-    access_token: data.access_token,
-    refresh_token: data.refresh_token,
-    expires_at: Date.now() + (data.expires_in * 1000),
-    email: (data.user && data.user.email) || email
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: Date.now() + (expiresIn * 1000)
   };
   currentSession = session;
   storeSession(session);
+  history.replaceState(null, '', window.location.pathname + window.location.search);
   return session;
 }
 
@@ -1910,9 +1923,6 @@ setInterval(function(){
 /* =========================================================
    LOGIN
    ========================================================= */
-var loginStep = 1;
-var loginEmailValue = '';
-
 function showLoginError(msg){
   var el = document.getElementById('loginError');
   el.textContent = msg;
@@ -1925,57 +1935,40 @@ function showApp(){
   document.getElementById('loginOverlay').classList.add('hidden');
   document.getElementById('app').style.display = '';
 }
+function showLoginSentState(email){
+  document.getElementById('loginStep1').style.display = 'none';
+  document.getElementById('loginStep2').style.display = '';
+  document.getElementById('loginEmailEcho').textContent = email;
+  document.getElementById('loginSubmit').style.display = 'none';
+  document.getElementById('loginBack').style.display = '';
+}
 
 async function handleLoginSubmit(){
   hideLoginError();
   var btn = document.getElementById('loginSubmit');
-  if(loginStep === 1){
-    var email = document.getElementById('loginEmail').value.trim();
-    if(!email){ showLoginError('Digite seu e-mail.'); return; }
-    btn.disabled = true; btn.textContent = 'Enviando…';
-    try{
-      await requestLoginCode(email);
-      loginEmailValue = email;
-      loginStep = 2;
-      document.getElementById('loginEmailEcho').textContent = email;
-      document.getElementById('loginStep1').style.display = 'none';
-      document.getElementById('loginStep2').style.display = '';
-      document.getElementById('loginBack').style.display = '';
-      btn.textContent = 'Confirmar código';
-      document.getElementById('loginCode').focus();
-    }catch(e){
-      showLoginError('Não foi possível enviar o código (e-mail não autorizado ou fora do ar).');
-    }finally{
-      btn.disabled = false;
-    }
-  } else {
-    var code = document.getElementById('loginCode').value.trim();
-    if(!code){ showLoginError('Digite o código recebido.'); return; }
-    btn.disabled = true; btn.textContent = 'Confirmando…';
-    try{
-      await verifyLoginCode(loginEmailValue, code);
-      showApp();
-      initStore();
-    }catch(e){
-      showLoginError('Código inválido ou expirado.');
-    }finally{
-      btn.disabled = false;
-      btn.textContent = 'Confirmar código';
-    }
+  var email = document.getElementById('loginEmail').value.trim();
+  if(!email){ showLoginError('Digite seu e-mail.'); return; }
+  btn.disabled = true; btn.textContent = 'Enviando…';
+  try{
+    await requestMagicLink(email);
+    showLoginSentState(email);
+  }catch(e){
+    showLoginError('Não foi possível enviar o link (e-mail não autorizado ou fora do ar).');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Enviar link de acesso';
   }
 }
 
 document.getElementById('loginSubmit').addEventListener('click', handleLoginSubmit);
 document.getElementById('loginBack').addEventListener('click', function(){
-  loginStep = 1;
   document.getElementById('loginStep1').style.display = '';
   document.getElementById('loginStep2').style.display = 'none';
+  document.getElementById('loginSubmit').style.display = '';
   document.getElementById('loginBack').style.display = 'none';
-  document.getElementById('loginSubmit').textContent = 'Enviar código';
   hideLoginError();
 });
 document.getElementById('loginEmail').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLoginSubmit(); });
-document.getElementById('loginCode').addEventListener('keydown', function(e){ if(e.key==='Enter') handleLoginSubmit(); });
 document.getElementById('logoutBtn').addEventListener('click', function(){
   if(confirm('Sair da conta?')) signOut();
 });
@@ -1984,7 +1977,8 @@ document.getElementById('logoutBtn').addEventListener('click', function(){
    BOOT
    ========================================================= */
 async function boot(){
-  currentSession = loadStoredSession();
+  consumeAuthRedirect();
+  if(!currentSession) currentSession = loadStoredSession();
   var session = await ensureSession();
   if(session){
     showApp();
